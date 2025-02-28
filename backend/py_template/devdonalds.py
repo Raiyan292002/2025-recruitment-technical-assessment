@@ -28,7 +28,7 @@ class Ingredient(CookbookEntry):
 app = Flask(__name__)
 
 # Store your recipes here!
-cookbook = None
+cookbook = {}
 
 # Task 1 helper (don't touch)
 @app.route("/parse", methods=['POST'])
@@ -72,8 +72,48 @@ def parse_handwriting(recipeName: str) -> Union[str | None]:
 # Endpoint that adds a CookbookEntry to your magical cookbook
 @app.route('/entry', methods=['POST'])
 def create_entry():
-	# TODO: implement me
-	return 'not implemented', 500
+	data = request.get_json()
+
+	name = data.get('name')
+	entryType = data.get('type')
+
+	# Check if name already exists in cookbook
+	if cookbook and name in cookbook:
+		return jsonify({"error": "Entry name must be unique"}), 400
+	
+	# Process ingredient entries
+	if entryType == "ingredient":
+		if 'cookTime' not in data or not isinstance(data['cookTime'], int) or data['cookTime'] < 0:
+			return jsonify({"error": "Invalid cookTime, must be an integer >= 0"}), 400
+		
+		# Add to cookbook
+		cookbook[name] = Ingredient(name=name, cook_time=data['cookTime'])
+		
+	# Process recipe entries
+	elif entryType == "recipe":
+		if 'requiredItems' not in data or not isinstance(data['requiredItems'], list):
+			return jsonify({"error": "Invalid requireItems, must be a list"}), 400
+		
+		seenItems = set()
+		requiredItems = []
+
+		for item in data['requiredItems']:
+			if 'name' not in item or 'quantity' not in item or not isinstance(item['quantity'], int) or item['quantity'] <= 0:
+				return jsonify({"error": "Each requiredItem must have a valid name and quantity > 0"}), 400
+			
+			# Ensure no duplicate names in requiredItems
+			if item['name'] in seenItems:
+				return jsonify({"error": "Duplicate requiredItem names are not allowed"}), 400
+			seenItems.add(item['name'])
+
+			requiredItems.append(RequiredItem(name=item['name'], quantity=item['quantity']))
+
+		cookbook[name] = Recipe(name=name, required_items = requiredItems)
+
+	else:
+		return jsonify({"error": "Invalid type, must be 'recipe' or 'ingredients'"}), 400
+	
+	return "success", 200
 
 
 # [TASK 3] ====================================================================
